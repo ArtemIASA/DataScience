@@ -1,0 +1,56 @@
+import numpy as np
+import pandas as pd
+import collections
+from nltk.corpus import stopwords
+
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.linear_model import LogisticRegression
+from sklearn.model_selection import cross_val_score
+from math import sqrt
+
+if __name__ == '__main__':
+
+ class_names = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate']
+
+ train = pd.read_csv('train.csv').fillna(' ')
+ test = pd.read_csv('test.csv').fillna(' ')
+ train.head()
+
+ train_text = train['comment_text']
+ test_text = test['comment_text']
+ all_text = pd.concat([train_text, test_text])
+
+ c = collections.Counter()
+ all_text_count = all_text.to_string()
+ all_text_count = all_text_count.lower()
+ all_text_count = all_text_count.split(' ')
+ for word in all_text_count:
+     c[word] += 1
+ print(c.most_common(5))
+ 
+ stop_words = set(stopwords.words('english')) - set('you')
+ word_vectorizer = TfidfVectorizer(stop_words=stop_words,ngram_range=(1,2))
+ word_vectorizer.fit(all_text)
+ train_word_features = word_vectorizer.transform(train_text)
+ test_word_features = word_vectorizer.transform(test_text)
+
+ classifier = LogisticRegression(C = 1.25)
+
+ scores= []
+
+ for class_name in class_names:
+    train_target = train[class_name]
+
+    cv_score = np.mean(cross_val_score(classifier, train_word_features, train_target, scoring='roc_auc',n_jobs=-1))
+
+    print('CV score for class {} is {}'.format(class_name, cv_score))
+    scores.append(cv_score)
+
+ print('Total score is {}'.format(np.mean(scores)))
+
+ submission = pd.DataFrame.from_dict({'id': test['id']})
+ for class_name in class_names:
+     train_target = train[class_name]
+     classifier.fit(train_word_features, train_target)
+     submission[class_name] = classifier.predict_proba(test_word_features)[:, 1]
+     submission.to_csv('submission.csv', index=False)
